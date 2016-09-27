@@ -562,6 +562,17 @@ class Ceph(Cluster):
         common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool delete %s %s --yes-i-really-really-mean-it' % (self.ceph_cmd, self.tmp_conf, name, name),
                     continue_if_error=False).communicate()
 
+        logger.info('Waiting for OSD disk utilization to settle...')
+        disk_util_max = 3
+        window_size = 30
+        wait_cmd = 'while [ $(iostat -dxyz ALL %s 1 | awk \'BEGIN {m=0} {v=int($NF); if(v>m){m=v}} END {print m}\') -gt %s ]; do true; done' % (window_size, disk_util_max)
+        common.pdsh(settings.getnodes('osds'), wait_cmd).communicate()
+
+        logger.info('Waiting for OSD CPU utilization to settle...')
+        osd_cpu_max = 3
+        wait_cmd = 'while [ $(top -bn1 | awk \'$NF == "ceph-osd" {print int($9) ; exit}\') -gt %s ]; do sleep 5; done' % (osd_cpu_max)
+        common.pdsh(settings.getnodes('osds'), wait_cmd).communicate()
+
     def rbd_unmount(self):
         common.pdsh(settings.getnodes('clients'), 'sudo find /dev/rbd* -maxdepth 0 -type b -exec umount \'{}\' \;').communicate()
 #        common.pdsh(settings.getnodes('clients'), 'sudo find /dev/rbd* -maxdepth 0 -type b -exec rbd -c %s unmap \'{}\' \;' % self.tmp_conf).communicate()
